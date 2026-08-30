@@ -262,6 +262,35 @@ describe('snapshot', () => {
     new CloudflareARecord(stack, 'Rec', { zone, recordName: 'app', content: '1.2.3.4', proxied: true });
 
     const template = Template.fromStack(stack);
-    expect(template.toJSON()).toMatchSnapshot();
+    expect(normalizeTemplate(template.toJSON())).toMatchSnapshot();
   });
 });
+
+/**
+ * Removes platform-dependent Lambda asset references (their S3 hashes differ
+ * between operating systems) so the snapshot is stable across CI environments.
+ */
+function normalizeTemplate(template: Record<string, unknown>): Record<string, unknown> {
+  const clone = JSON.parse(JSON.stringify(template)) as {
+    Parameters?: Record<string, unknown>;
+    Resources?: Record<string, { Properties?: { Code?: Record<string, unknown> } }>;
+  };
+
+  if (clone.Parameters) {
+    for (const key of Object.keys(clone.Parameters)) {
+      if (key.startsWith('AssetParameters')) {
+        delete clone.Parameters[key];
+      }
+    }
+  }
+
+  for (const resource of Object.values(clone.Resources ?? {})) {
+    if (resource.Properties?.Code) {
+      delete resource.Properties.Code.S3Bucket;
+      delete resource.Properties.Code.S3Key;
+      delete resource.Properties.Code.S3ObjectVersion;
+    }
+  }
+
+  return clone;
+}

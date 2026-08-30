@@ -19,12 +19,7 @@ exports[`snapshot matches the snapshot 1`] = `
         "Architectures": [
           "arm64",
         ],
-        "Code": {
-          "S3Bucket": {
-            "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
-          },
-          "S3Key": "8d28a71b0ed8ef32cf2821ace32d9a8ee76bb46d95d0a4ffb3c61b3e352c2a80.zip",
-        },
+        "Code": {},
         "Handler": "index.handler",
         "MemorySize": 256,
         "Role": {
@@ -139,12 +134,7 @@ exports[`snapshot matches the snapshot 1`] = `
         "AcmeCloudflareDnsProviderframeworkonEventServiceRole62C7F914",
       ],
       "Properties": {
-        "Code": {
-          "S3Bucket": {
-            "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
-          },
-          "S3Key": "e16ffb3b34af185b8b30c88fdb19faa13b6c42bb38580485c4e84b384ee48b63.zip",
-        },
+        "Code": {},
         "Description": "AWS CDK resource provider framework - onEvent (TestStack/AcmeCloudflareDnsProvider/Provider)",
         "Environment": {
           "Variables": {
