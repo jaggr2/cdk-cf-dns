@@ -120,6 +120,19 @@ describe('handler', () => {
     await expect(handler(baseEvent() as never)).rejects.toThrow(/adoptExisting/);
   });
 
+  test('create conflict with stringified adoptExisting="false" throws a helpful error', async () => {
+    mockFetch(errorResponse(400, 81057, 'DNS record already exists'));
+
+    const event = baseEvent({
+      ResourceProperties: {
+        ...(baseEvent().ResourceProperties as Record<string, unknown>),
+        adoptExisting: 'false',
+      },
+    });
+
+    await expect(handler(event as never)).rejects.toThrow(/adoptExisting/);
+  });
+
   test('create conflict with adoptExisting=true looks up, patches and returns the existing id', async () => {
     const fetchMock = mockFetch(
       errorResponse(400, 81057, 'already exists'),
@@ -198,6 +211,17 @@ describe('handler', () => {
 
     expect(result.PhysicalResourceId).toBe('a'.repeat(32));
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('delete with stringified retainOnDelete="false" still deletes the record', async () => {
+    const fetchMock = mockFetch({ status: 200, body: { success: true, errors: [], messages: [], result: { id: 'a'.repeat(32) } } });
+
+    const result = await handler(deleteEvent('a'.repeat(32), {
+      ResourceProperties: { ...(baseEvent().ResourceProperties as Record<string, unknown>), retainOnDelete: 'false' },
+    }));
+
+    expect(result.PhysicalResourceId).toBe('a'.repeat(32));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test('success=false with errors throws a message containing the code', async () => {

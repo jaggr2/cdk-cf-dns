@@ -132,6 +132,15 @@ export async function getApiToken(secretArn: string): Promise<string> {
 }
 
 /**
+ * Returns true when a boolean custom resource property is true. CloudFormation
+ * delivers nested property values stringified, so `false` arrives as the string
+ * `"false"` (which is truthy in JavaScript); this treats it correctly.
+ */
+export function isTrue(value: unknown): boolean {
+  return value === true || value === 'true';
+}
+
+/**
  * A Cloudflare API error, carrying the HTTP status and the error payload so the
  * lifecycle logic can inspect specific error codes.
  */

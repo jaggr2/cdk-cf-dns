@@ -7,6 +7,7 @@ import {
   getApiToken,
   isAlreadyExists,
   isRecordDoesNotExist,
+  isTrue,
   log,
   RECORD_ID_PATTERN,
   request,
@@ -26,7 +27,7 @@ async function onCreate(event: CloudFormationCustomResourceCreateEvent): Promise
   const response = await request(`/zones/${zoneId}/dns_records`, { method: 'POST', token, body: payload });
 
   if (isAlreadyExists(response)) {
-    if (!properties.adoptExisting) {
+    if (!isTrue(properties.adoptExisting)) {
       throw new Error(
         `DNS record ${String(payload.name)} (${String(payload.type)}) already exists in zone ${zoneId}. ` +
           'Either delete it in the Cloudflare dashboard, or set adoptExisting: true to adopt and manage it.',
@@ -92,7 +93,7 @@ async function onDelete(event: CloudFormationCustomResourceDeleteEvent): Promise
   const zoneId = String(properties.zoneId);
   const physicalId = event.PhysicalResourceId;
 
-  if (properties.retainOnDelete) {
+  if (isTrue(properties.retainOnDelete)) {
     log('delete', { message: 'retainOnDelete set; leaving record in Cloudflare', zoneId });
     return { PhysicalResourceId: physicalId, Data: {} };
   }
