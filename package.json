@@ -1,6 +1,6 @@
 {
   "name": "@jaggr2/cdk-cf-dns",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Manage Cloudflare DNS records as CloudFormation resources from AWS CDK, so Route 53 hosted zones are no longer needed.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
