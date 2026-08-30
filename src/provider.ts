@@ -130,18 +130,38 @@ export class CloudflareDnsProvider extends Construct {
    * Grants the provider's handler `secretsmanager:GetSecretValue` on the given
    * secret. Repeated grants of the same secret are deduplicated.
    *
-   * Delegates to `ISecret.grantRead`, which correctly handles partial ARNs for
-   * secrets imported by name (Secrets Manager appends a random suffix, so the
-   * grant targets `arn:...:secret:<name>-??????`).
+   * When `region` differs from the stack's region (a cross-region secret, e.g.
+   * a `us-east-1` cert stack reading a secret in `eu-central-1`), the grant is
+   * built manually against the secret's actual region ARN; otherwise it
+   * delegates to `ISecret.grantRead`, which correctly handles the random
+   * suffix Secrets Manager appends to imported-by-name secrets.
    *
    * @param secret The secret holding a Cloudflare API token.
+   * @param region The region the secret lives in, if different from the stack.
    */
-  public grantSecretRead(secret: secretsmanager.ISecret): void {
+  public grantSecretRead(secret: secretsmanager.ISecret, region?: string): void {
     const arn = secret.secretArn;
     if (this.grantedSecrets.has(arn)) {
       return;
     }
     this.grantedSecrets.add(arn);
+
+    const secretRegion = region ?? secret.stack.region;
+    if (secretRegion !== secret.stack.region) {
+      const targetArn = cdk.Stack.of(this).formatArn({
+        service: 'secretsmanager',
+        resource: 'secret',
+        resourceName: `${secret.secretName}-??????`,
+        region: secretRegion,
+        arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+      });
+      this.handlerRole.addToPrincipalPolicy(new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [targetArn],
+      }));
+      return;
+    }
+
     secret.grantRead(this.handlerRole);
   }
 }
@@ -187,12 +207,13 @@ export class CloudflareCertificateProvider extends Construct {
   private constructor(scope: Construct, id: string) {
     super(scope, id);
 
-    // ACM validation records can take a while to appear after certificate
-    // creation, so the handler gets a generous timeout to poll for them.
-    const { handler, role } = createHandler(this, 'Handler', 'acm.ts', cdk.Duration.minutes(5));
+    // The handler creates the certificate, polls for the validation records,
+    // writes them into Cloudflare and then polls until the certificate is
+    // ISSUED, so it needs a long timeout.
+    const { handler, role } = createHandler(this, 'Handler', 'acm.ts', cdk.Duration.minutes(10));
 
     role.addToPrincipalPolicy(new iam.PolicyStatement({
-      actions: ['acm:DescribeCertificate'],
+      actions: ['acm:RequestCertificate', 'acm:DescribeCertificate', 'acm:DeleteCertificate'],
       resources: ['*'],
     }));
 
@@ -208,18 +229,38 @@ export class CloudflareCertificateProvider extends Construct {
    * Grants the provider's handler `secretsmanager:GetSecretValue` on the given
    * secret. Repeated grants of the same secret are deduplicated.
    *
-   * Delegates to `ISecret.grantRead`, which correctly handles partial ARNs for
-   * secrets imported by name (Secrets Manager appends a random suffix, so the
-   * grant targets `arn:...:secret:<name>-??????`).
+   * When `region` differs from the stack's region (a cross-region secret, e.g.
+   * a `us-east-1` cert stack reading a secret in `eu-central-1`), the grant is
+   * built manually against the secret's actual region ARN; otherwise it
+   * delegates to `ISecret.grantRead`, which correctly handles the random
+   * suffix Secrets Manager appends to imported-by-name secrets.
    *
    * @param secret The secret holding a Cloudflare API token.
+   * @param region The region the secret lives in, if different from the stack.
    */
-  public grantSecretRead(secret: secretsmanager.ISecret): void {
+  public grantSecretRead(secret: secretsmanager.ISecret, region?: string): void {
     const arn = secret.secretArn;
     if (this.grantedSecrets.has(arn)) {
       return;
     }
     this.grantedSecrets.add(arn);
+
+    const secretRegion = region ?? secret.stack.region;
+    if (secretRegion !== secret.stack.region) {
+      const targetArn = cdk.Stack.of(this).formatArn({
+        service: 'secretsmanager',
+        resource: 'secret',
+        resourceName: `${secret.secretName}-??????`,
+        region: secretRegion,
+        arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+      });
+      this.handlerRole.addToPrincipalPolicy(new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [targetArn],
+      }));
+      return;
+    }
+
     secret.grantRead(this.handlerRole);
   }
 }

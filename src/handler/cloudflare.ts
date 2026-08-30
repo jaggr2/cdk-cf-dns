@@ -57,7 +57,7 @@ export interface CloudflareDnsRecord {
 }
 
 const secretCache = new Map<string, string>();
-let secretsClient: SecretsManagerClient | undefined;
+const secretClients = new Map<string, SecretsManagerClient>();
 
 /**
  * Redacts strings that look like Cloudflare credentials (and known token
@@ -91,26 +91,34 @@ export function log(...args: unknown[]): void {
 }
 
 /**
- * Resolves the Cloudflare API token from Secrets Manager, caching it per ARN so
- * warm invocations skip the API call. Supports the secret being either a raw
- * string or a JSON blob with an `apiToken` key.
+ * Resolves the Cloudflare API token from Secrets Manager, caching it per
+ * (region, secret id) so warm invocations skip the API call. Supports the
+ * secret being either a raw string or a JSON blob with an `apiToken` key.
  *
- * @param secretArn The ARN of the secret holding the token.
+ * The secret id may be a full ARN, a partial ARN, or the secret name. The
+ * region comes from the zone's resolved `apiTokenRegion`, so secrets in a
+ * different region than the stack are read from the right endpoint.
+ *
+ * @param secretId The secret id (name, partial ARN or full ARN) holding the token.
+ * @param region   The region the secret lives in.
  */
-export async function getApiToken(secretArn: string): Promise<string> {
-  const cached = secretCache.get(secretArn);
+export async function getApiToken(secretId: string, region: string): Promise<string> {
+  const cacheKey = `${region}/${secretId}`;
+  const cached = secretCache.get(cacheKey);
   if (cached !== undefined) {
     return cached;
   }
 
-  if (!secretsClient) {
-    secretsClient = new SecretsManagerClient({});
+  let client = secretClients.get(region);
+  if (!client) {
+    client = new SecretsManagerClient({ region });
+    secretClients.set(region, client);
   }
 
-  const response = await secretsClient.send(new GetSecretValueCommand({ SecretId: secretArn }));
+  const response = await client.send(new GetSecretValueCommand({ SecretId: secretId }));
   const secretString = response.SecretString;
   if (secretString === undefined) {
-    throw new Error(`Secret ${secretArn} has no SecretString; store the API token as a raw string or a JSON blob with an "apiToken" key`);
+    throw new Error(`Secret ${secretId} has no SecretString; store the API token as a raw string or a JSON blob with an "apiToken" key`);
   }
 
   let token = secretString;
@@ -124,10 +132,10 @@ export async function getApiToken(secretArn: string): Promise<string> {
   }
 
   if (token.length === 0) {
-    throw new Error(`Secret ${secretArn} resolved to an empty API token`);
+    throw new Error(`Secret ${secretId} resolved to an empty API token`);
   }
 
-  secretCache.set(secretArn, token);
+  secretCache.set(cacheKey, token);
   return token;
 }
 

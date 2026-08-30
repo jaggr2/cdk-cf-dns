@@ -28,9 +28,20 @@ export interface ICloudflareZone {
   /**
    * The Secrets Manager secret holding the Cloudflare API token. The secret may
    * contain the token as a raw string or as a JSON blob with an `apiToken` key.
-   * Only the secret ARN ever appears in the CloudFormation template.
+   * Only the secret name (and region) ever appear in the CloudFormation template.
    */
   readonly apiToken: secretsmanager.ISecret;
+
+  /**
+   * The region where the API token secret lives. This is only needed when the
+   * secret is in a different region than the stack (for example an ACM
+   * certificate stack in `us-east-1` whose token secret lives in
+   * `eu-central-1`). When omitted, it is inferred from the secret ARN when the
+   * secret was imported by full ARN, otherwise the stack region is used.
+   *
+   * @default - inferred from the secret ARN, otherwise the stack region
+   */
+  readonly apiTokenRegion?: string;
 }
 
 /**
@@ -46,7 +57,7 @@ export interface CloudflareZoneAttributes {
   /**
    * The Secrets Manager secret holding the Cloudflare API token. The secret may
    * contain the token as a raw string or as a JSON blob with an `apiToken` key.
-   * Only the secret ARN ever appears in the CloudFormation template.
+   * Only the secret name (and region) ever appear in the CloudFormation template.
    */
   readonly apiToken: secretsmanager.ISecret;
 
@@ -56,6 +67,17 @@ export interface CloudflareZoneAttributes {
    * @default - record names are used verbatim
    */
   readonly zoneName?: string;
+
+  /**
+   * The region where the API token secret lives. Only needed when the secret is
+   * in a different region than the stack (for example an ACM certificate stack
+   * in `us-east-1` whose token secret lives in `eu-central-1`). When omitted,
+   * it is inferred from the secret ARN when the secret was imported by full
+   * ARN, otherwise the stack region is used.
+   *
+   * @default - inferred from the secret ARN, otherwise the stack region
+   */
+  readonly apiTokenRegion?: string;
 }
 
 /**
@@ -79,6 +101,7 @@ export class CloudflareZone extends Construct implements ICloudflareZone {
   public readonly zoneId: string;
   public readonly zoneName?: string;
   public readonly apiToken: secretsmanager.ISecret;
+  public readonly apiTokenRegion: string;
 
   private constructor(scope: Construct, id: string, attrs: CloudflareZoneAttributes) {
     super(scope, id);
@@ -93,7 +116,29 @@ export class CloudflareZone extends Construct implements ICloudflareZone {
     this.zoneId = validateNoToken(attrs.zoneId, 'zoneId');
     this.zoneName = attrs.zoneName === undefined ? undefined : validateNoToken(attrs.zoneName, 'zoneName');
     this.apiToken = attrs.apiToken;
+    this.apiTokenRegion = resolveApiTokenRegion(scope, attrs);
   }
+}
+
+/**
+ * Resolves the region where the API token secret lives: an explicit
+ * `apiTokenRegion` wins, otherwise the region is read from a literal secret ARN
+ * when one was provided, otherwise the stack region is assumed.
+ */
+function resolveApiTokenRegion(scope: Construct, attrs: CloudflareZoneAttributes): string {
+  if (attrs.apiTokenRegion !== undefined) {
+    return attrs.apiTokenRegion;
+  }
+
+  const arn = attrs.apiToken.secretArn;
+  if (!cdk.Token.isUnresolved(arn)) {
+    const match = /^arn:[^:]+:secretsmanager:([^:]+):/.exec(arn);
+    if (match) {
+      return match[1];
+    }
+  }
+
+  return cdk.Stack.of(scope).region;
 }
 
 /**

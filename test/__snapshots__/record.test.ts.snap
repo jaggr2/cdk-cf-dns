@@ -258,27 +258,23 @@ exports[`snapshot matches the snapshot 1`] = `
           ],
         },
         "adoptExisting": false,
-        "apiTokenSecretArn": {
-          "Fn::Join": [
-            "",
-            [
-              "arn:",
-              {
-                "Ref": "AWS::Partition",
-              },
-              ":secretsmanager:",
-              {
-                "Ref": "AWS::Region",
-              },
-              ":",
-              {
-                "Ref": "AWS::AccountId",
-              },
-              ":secret:cloudflare/dns-token",
-            ],
-          ],
+        "apiTokenRegion": {
+          "Ref": "AWS::Region",
         },
+        "apiTokenSecretId": "cloudflare/dns-token",
         "record": {
+          "comment": {
+            "Fn::Join": [
+              "",
+              [
+                "managed by cdk-cf-dns (stack: TestStack, account: ",
+                {
+                  "Ref": "AWS::AccountId",
+                },
+                ")",
+              ],
+            ],
+          },
           "content": "1.2.3.4",
           "name": "app.example.com",
           "proxied": true,

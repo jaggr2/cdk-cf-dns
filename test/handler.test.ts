@@ -45,7 +45,8 @@ function baseEvent(overrides: Record<string, unknown> = {}): Record<string, unkn
     ResourceType: 'Custom::CloudflareDnsRecord',
     ResourceProperties: {
       zoneId: 'c0ffee00000000000000000000000000',
-      apiTokenSecretArn: 'arn:aws:secretsmanager:us-east-1:123456789012:secret:cloudflare/dns-token-abc',
+      apiTokenSecretId: 'cloudflare/dns-token',
+      apiTokenRegion: 'eu-central-1',
       adoptExisting: false,
       retainOnDelete: false,
       record: { name: 'app.example.com', type: 'A', content: '1.2.3.4', ttl: 300 },

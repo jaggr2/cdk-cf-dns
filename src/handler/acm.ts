@@ -1,4 +1,4 @@
-import { ACMClient, DescribeCertificateCommand } from '@aws-sdk/client-acm';
+import { ACMClient, DeleteCertificateCommand, DescribeCertificateCommand, RequestCertificateCommand } from '@aws-sdk/client-acm';
 import type { CloudFormationCustomResourceCreateEvent, CloudFormationCustomResourceDeleteEvent, CloudFormationCustomResourceEvent, CloudFormationCustomResourceUpdateEvent } from 'aws-lambda';
 import { assertSuccess, findRecord, getApiToken, isAlreadyExists, log, request } from './cloudflare';
 
@@ -17,6 +17,21 @@ interface ValidationRecord {
  */
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Requests a new DNS-validated certificate and returns its ARN.
+ */
+async function requestCertificate(domainName: string, subjectAlternativeNames: string[]): Promise<string> {
+  const response = await acmClient.send(new RequestCertificateCommand({
+    DomainName: domainName,
+    SubjectAlternativeNames: subjectAlternativeNames.length > 0 ? subjectAlternativeNames : undefined,
+    ValidationMethod: 'DNS',
+  }));
+  if (!response.CertificateArn) {
+    throw new Error('RequestCertificate returned no CertificateArn');
+  }
+  return response.CertificateArn;
 }
 
 /**
@@ -46,7 +61,7 @@ async function describeValidationRecords(certificateArn: string): Promise<Valida
 
 /**
  * Polls ACM until the validation `ResourceRecord`s are populated. They are
- * absent for a few seconds after the certificate is created, so the handler
+ * absent for a few seconds after the certificate is requested, so the handler
  * retries until they appear or the deadline is reached.
  */
 async function pollValidationRecords(
@@ -65,6 +80,25 @@ async function pollValidationRecords(
   }
 
   throw new Error(`Timed out waiting for ACM DNS validation records for ${certificateArn}`);
+}
+
+/**
+ * Polls until the certificate reaches ISSUED. Returns true if it did, false if
+ * the deadline elapsed first (the records are already written, so ACM will
+ * complete validation shortly after).
+ */
+async function pollUntilIssued(certificateArn: string, delaySeconds: number, timeoutSeconds: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutSeconds * 1000;
+
+  while (Date.now() < deadline) {
+    const response = await acmClient.send(new DescribeCertificateCommand({ CertificateArn: certificateArn }));
+    if (response.Certificate?.Status === 'ISSUED') {
+      return true;
+    }
+    await sleep(delaySeconds * 1000);
+  }
+
+  return false;
 }
 
 /**
@@ -96,40 +130,84 @@ async function upsertCname(zoneId: string, name: string, value: string, token: s
 }
 
 /**
- * Handles both `Create` and `Update`: reads the certificate's validation
- * records from ACM and writes each unique CNAME into Cloudflare.
+ * Coerces a string array property. CloudFormation can deliver nested arrays
+ * stringified, so a JSON string is parsed back into an array.
+ */
+function coerceStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(String);
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.map(String);
+      }
+    } catch {
+      // Not a JSON array; treat the string as a single element.
+    }
+    return [value];
+  }
+  return [];
+}
+
+/**
+ * Handles both `Create` and `Update`: requests the certificate, writes each
+ * unique validation CNAME into Cloudflare, waits for issuance and returns the
+ * certificate ARN.
  */
 async function onUpsert(
   event: CloudFormationCustomResourceCreateEvent | CloudFormationCustomResourceUpdateEvent,
 ): Promise<{ PhysicalResourceId: string; Data: Record<string, unknown> }> {
   const properties = event.ResourceProperties as Record<string, unknown>;
-  const certificateArn = String(properties.certificateArn);
+  const domainName = String(properties.domainName);
+  const subjectAlternativeNames = coerceStringArray(properties.subjectAlternativeNames);
   const zoneId = String(properties.zoneId);
-  const token = await getApiToken(String(properties.apiTokenSecretArn));
+  const token = await getApiToken(String(properties.apiTokenSecretId), String(properties.apiTokenRegion));
   const delaySeconds = Number(properties.pollDelaySeconds ?? 5);
-  const timeoutSeconds = Number(properties.pollTimeoutSeconds ?? 120);
+  const recordPollTimeoutSeconds = Number(properties.recordPollTimeoutSeconds ?? 120);
+  const issuedPollTimeoutSeconds = Number(properties.issuedPollTimeoutSeconds ?? 480);
 
-  log('validation', { certificateArn, zoneId });
+  log('validation', { domainName, subjectAlternativeNames, zoneId });
 
-  const records = await pollValidationRecords(certificateArn, delaySeconds, timeoutSeconds);
+  const certificateArn = await requestCertificate(domainName, subjectAlternativeNames);
+  log('validation', { message: 'certificate requested', certificateArn });
+
+  const records = await pollValidationRecords(certificateArn, delaySeconds, recordPollTimeoutSeconds);
   for (const record of records) {
     await upsertCname(zoneId, record.name, record.value, token);
   }
 
-  log('validation', { message: `wrote ${records.length} validation record(s)`, names: records.map((r) => r.name) });
+  const issued = await pollUntilIssued(certificateArn, delaySeconds, issuedPollTimeoutSeconds);
+  if (!issued) {
+    log('validation', { message: 'certificate not yet ISSUED when the deadline elapsed; returning the ARN', certificateArn });
+  }
+
   return {
     PhysicalResourceId: certificateArn,
-    Data: { ValidationRecords: records.map((r) => r.name) },
+    Data: {
+      CertificateArn: certificateArn,
+      ValidationRecords: records.map((r) => r.name),
+    },
   };
 }
 
 /**
- * Handles `Delete`. The validation CNAMEs are left in Cloudflare — they are
- * harmless after issuance and cleaning them up would add fragile delete logic.
+ * Handles `Delete`: deletes the certificate ACM created. This is best-effort —
+ * if the certificate is still in use the delete fails and the record is left.
  */
 async function onDelete(event: CloudFormationCustomResourceDeleteEvent): Promise<{ PhysicalResourceId: string; Data: Record<string, unknown> }> {
-  log('validation', { message: 'delete; leaving validation records in Cloudflare' });
-  return { PhysicalResourceId: event.PhysicalResourceId, Data: {} };
+  const physicalId = event.PhysicalResourceId;
+  if (physicalId.startsWith('arn:aws:acm:')) {
+    try {
+      await acmClient.send(new DeleteCertificateCommand({ CertificateArn: physicalId }));
+      log('validation', { message: 'certificate deleted', physicalId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log('validation', { message: `certificate delete failed and was ignored: ${message}`, physicalId });
+    }
+  }
+  return { PhysicalResourceId: physicalId, Data: {} };
 }
 
 /**

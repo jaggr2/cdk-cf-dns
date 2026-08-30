@@ -124,6 +124,7 @@ Properties for a Cloudflare DNS record.
 | `proxied?` | `boolean` | Whether to proxy the record through Cloudflare. Only valid for A, AAAA and CNAME. |
 | `priority?` | `number` | Record priority. Required for MX, SRV and URI. |
 | `comment?` | `string` | A free-form comment attached to the record. |
+| `managedByCdkComment?` | `boolean` | Whether to add a comment identifying the record as managed by this library, including the CloudFormation stack name and account id (e.g. `managed by cdk-cf-dns (stack: MyStack, account: 123456789012)`).  Cloudflare only supports record *tags* on paid (Pro/Business/Enterprise) plans, so this uses the `comment` field, which is available on all plans. When `comment` is provided it takes precedence and no automatic comment is added. |
 | `tags?` | `string[]` | Tags attached to the record. |
 | `adoptExisting?` | `boolean` | If a record with the same name+type already exists in Cloudflare, adopt and manage it instead of failing the deployment. |
 | `removalPolicy?` | `cdk.RemovalPolicy` | If RETAIN, the record is left in Cloudflare when the stack resource is deleted. |
@@ -155,8 +156,9 @@ Properties for referencing an existing Cloudflare zone.
 | Name | Type | Description |
 |------|------|-------------|
 | `zoneId` | `string` | The Cloudflare Zone ID, e.g. `"abc123..."`. This may be a plain string or a CDK token (for example resolved from SSM at deploy time). |
-| `apiToken` | `cdk.aws_secretsmanager.ISecret` | The Secrets Manager secret holding the Cloudflare API token. The secret may contain the token as a raw string or as a JSON blob with an `apiToken` key. Only the secret ARN ever appears in the CloudFormation template. |
+| `apiToken` | `cdk.aws_secretsmanager.ISecret` | The Secrets Manager secret holding the Cloudflare API token. The secret may contain the token as a raw string or as a JSON blob with an `apiToken` key. Only the secret name (and region) ever appear in the CloudFormation template. |
 | `zoneName?` | `string` | The apex domain, e.g. `"example.com"`. Enables relative record names. |
+| `apiTokenRegion?` | `string` | The region where the API token secret lives. Only needed when the secret is in a different region than the stack (for example an ACM certificate stack in `us-east-1` whose token secret lives in `eu-central-1`). When omitted, it is inferred from the secret ARN when the secret was imported by full ARN, otherwise the stack region is used. |
 
 ### ICloudflareZone
 
@@ -170,7 +172,8 @@ the Cloudflare dashboard (or elsewhere) and referenced here by their Zone ID.
 |------|------|-------------|
 | `zoneId` | `string` | The Cloudflare Zone ID, e.g. `"abc123..."`. This may be a plain string or a CDK token (for example resolved from SSM at deploy time). |
 | `zoneName?` | `string` | The apex domain, e.g. `"example.com"`. When set, `recordName` values that do not already end in the zone name are treated as relative and this suffix is appended, matching `aws-cdk-lib/aws-route53` ergonomics. |
-| `apiToken` | `cdk.aws_secretsmanager.ISecret` | The Secrets Manager secret holding the Cloudflare API token. The secret may contain the token as a raw string or as a JSON blob with an `apiToken` key. Only the secret ARN ever appears in the CloudFormation template. |
+| `apiToken` | `cdk.aws_secretsmanager.ISecret` | The Secrets Manager secret holding the Cloudflare API token. The secret may contain the token as a raw string or as a JSON blob with an `apiToken` key. Only the secret name (and region) ever appear in the CloudFormation template. |
+| `apiTokenRegion?` | `string` | The region where the API token secret lives. This is only needed when the secret is in a different region than the stack (for example an ACM certificate stack in `us-east-1` whose token secret lives in `eu-central-1`). When omitted, it is inferred from the secret ARN when the secret was imported by full ARN, otherwise the stack region is used. |
 
 ---
 
@@ -243,7 +246,7 @@ Extends: `Construct`
 | Name | Description |
 |------|-------------|
 | `static getOrCreate(scope: Construct): CloudflareCertificateProvider` | Gets (or lazily creates) the provider for the stack of `scope`. |
-| `grantSecretRead(secret: ISecret): void` | Grants the provider's handler `secretsmanager:GetSecretValue` on the given secret. Repeated grants of the same secret are deduplicated. |
+| `grantSecretRead(secret: ISecret, region?: string | undefined): void` | Grants the provider's handler `secretsmanager:GetSecretValue` on the given secret. Repeated grants of the same secret are deduplicated.  When `region` differs from the stack's region (a cross-region secret, e.g. a `us-east-1` cert stack reading a secret in `eu-central-1`), the grant is built manually against the secret's actual region ARN; otherwise it delegates to `ISecret.grantRead`, which correctly handles the random suffix Secrets Manager appends to imported-by-name secrets. |
 
 ### CloudflareCnameRecord
 
@@ -287,7 +290,7 @@ Extends: `Construct`
 | Name | Description |
 |------|-------------|
 | `static getOrCreate(scope: Construct): CloudflareDnsProvider` | Gets (or lazily creates) the provider for the stack of `scope`. |
-| `grantSecretRead(secret: ISecret): void` | Grants the provider's handler `secretsmanager:GetSecretValue` on the given secret. Repeated grants of the same secret are deduplicated. |
+| `grantSecretRead(secret: ISecret, region?: string | undefined): void` | Grants the provider's handler `secretsmanager:GetSecretValue` on the given secret. Repeated grants of the same secret are deduplicated.  When `region` differs from the stack's region (a cross-region secret, e.g. a `us-east-1` cert stack reading a secret in `eu-central-1`), the grant is built manually against the secret's actual region ARN; otherwise it delegates to `ISecret.grantRead`, which correctly handles the random suffix Secrets Manager appends to imported-by-name secrets. |
 
 ### CloudflareMxRecord
 
@@ -355,10 +358,15 @@ Extends: `CloudflareRecord`
 An ACM certificate whose DNS validation records are written into Cloudflare
 automatically, removing the manual copy-paste step.
 
-CloudFormation does not expose the validation `ResourceRecord` as a
-certificate attribute, so a custom resource calls `acm:DescribeCertificate`,
-polls until the records are populated (they are absent for a few seconds
-after creation), and writes each unique CNAME into Cloudflare.
+A CloudFormation `AWS::CertificateManager::Certificate` resource cannot be
+used here: with DNS validation and no Route 53 hosted zone, CloudFormation
+waits for the validation CNAMEs to exist, but the custom resource that writes
+them depends on the certificate — a deadlock. Instead, the custom resource
+creates the certificate itself (`acm:RequestCertificate`), polls until the
+validation `ResourceRecord`s appear, writes each unique CNAME into
+Cloudflare, and polls until the certificate is ISSUED before returning the
+certificate ARN. The construct exposes the result through
+`acm.Certificate.fromCertificateArn`.
 
 Note: if the certificate is attached to CloudFront it must live in
 `us-east-1`; this construct does not solve cross-region certificates.
@@ -376,7 +384,7 @@ Extends: `Construct`
 
 | Name | Description |
 |------|-------------|
-| `certificate: acm.Certificate (readonly)` | The underlying ACM certificate. |
+| `certificate: acm.ICertificate (readonly)` | The ACM certificate created by the custom resource. |
 
 ### CloudflareZone
 
@@ -401,6 +409,7 @@ Extends: `Construct`
 | `zoneId: string (readonly)` |  |
 | `zoneName?: string (readonly)` |  |
 | `apiToken: cdk.aws_secretsmanager.ISecret (readonly)` |  |
+| `apiTokenRegion: string (readonly)` |  |
 
 #### Methods
 

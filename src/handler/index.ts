@@ -20,7 +20,7 @@ async function onCreate(event: CloudFormationCustomResourceCreateEvent): Promise
   const properties = event.ResourceProperties as Record<string, unknown>;
   const zoneId = String(properties.zoneId);
   const payload = buildRecordPayload(properties);
-  const token = await getApiToken(String(properties.apiTokenSecretArn));
+  const token = await getApiToken(String(properties.apiTokenSecretId), String(properties.apiTokenRegion));
 
   log('create', { zoneId, name: payload.name, type: payload.type });
 
@@ -57,7 +57,7 @@ async function onUpdate(event: CloudFormationCustomResourceUpdateEvent): Promise
   const oldProperties = event.OldResourceProperties as Record<string, unknown>;
   const zoneId = String(properties.zoneId);
   const payload = buildRecordPayload(properties);
-  const token = await getApiToken(String(properties.apiTokenSecretArn));
+  const token = await getApiToken(String(properties.apiTokenSecretId), String(properties.apiTokenRegion));
 
   log('update', { zoneId, name: payload.name, type: payload.type });
 
@@ -105,7 +105,7 @@ async function onDelete(event: CloudFormationCustomResourceDeleteEvent): Promise
     return { PhysicalResourceId: physicalId, Data: {} };
   }
 
-  const token = await getApiToken(String(properties.apiTokenSecretArn));
+  const token = await getApiToken(String(properties.apiTokenSecretId), String(properties.apiTokenRegion));
   log('delete', { zoneId, physicalId });
 
   const response = await request(`/zones/${zoneId}/dns_records/${physicalId}`, { method: 'DELETE', token });

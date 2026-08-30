@@ -109,6 +109,21 @@ new CloudflareTxtRecord(this, 'Verify', {
 });
 ```
 
+### Managed-by comment
+
+Every record gets a Cloudflare comment identifying it as managed by this
+library, including the CloudFormation stack name and account id, so records can
+be traced back to their source stack:
+
+```
+managed by cdk-cf-dns (stack: MyStack, account: 123456789012)
+```
+
+This uses the `comment` field because Cloudflare only supports record *tags* on
+paid (Pro/Business/Enterprise) plans — comments are available on all plans.
+Pass your own `comment` to override it, or set `managedByCdkComment: false` to
+disable it.
+
 ### MX records
 
 ```ts

@@ -120,6 +120,20 @@ export interface CloudflareRecordProps {
   readonly comment?: string;
 
   /**
+   * Whether to add a comment identifying the record as managed by this library,
+   * including the CloudFormation stack name and account id (e.g. `managed by
+   * cdk-cf-dns (stack: MyStack, account: 123456789012)`).
+   *
+   * Cloudflare only supports record *tags* on paid (Pro/Business/Enterprise)
+   * plans, so this uses the `comment` field, which is available on all plans.
+   * When `comment` is provided it takes precedence and no automatic comment is
+   * added.
+   *
+   * @default true
+   */
+  readonly managedByCdkComment?: boolean;
+
+  /**
    * Tags attached to the record.
    *
    * @default - no tags
@@ -172,7 +186,7 @@ export class CloudflareRecord extends Construct {
     validateRecordProps(props);
 
     const provider = CloudflareDnsProvider.getOrCreate(this);
-    provider.grantSecretRead(props.zone.apiToken);
+    provider.grantSecretRead(props.zone.apiToken, props.zone.apiTokenRegion);
 
     const fqdn = resolveRecordName(props.recordName, props.zone.zoneName);
     const ttl = resolveTtl(this, props);
@@ -200,6 +214,8 @@ export class CloudflareRecord extends Construct {
     }
     if (props.comment !== undefined) {
       record.comment = props.comment;
+    } else if (props.managedByCdkComment ?? true) {
+      record.comment = buildManagedByComment(this);
     }
     if (props.tags !== undefined) {
       record.tags = props.tags;
@@ -213,7 +229,8 @@ export class CloudflareRecord extends Construct {
       removalPolicy,
       properties: {
         zoneId: props.zone.zoneId,
-        apiTokenSecretArn: props.zone.apiToken.secretArn,
+        apiTokenSecretId: props.zone.apiToken.secretName,
+        apiTokenRegion: props.zone.apiTokenRegion,
         adoptExisting: props.adoptExisting ?? false,
         retainOnDelete: removalPolicy === RemovalPolicy.RETAIN,
         record,
@@ -223,6 +240,16 @@ export class CloudflareRecord extends Construct {
     this.recordId = this.resource.getAttString('RecordId');
     this.domainName = this.resource.getAttString('DomainName');
   }
+}
+
+/**
+ * Builds the default "managed by cdk-cf-dns" comment, referencing the
+ * CloudFormation stack name and account id so records can be traced back to
+ * their source stack.
+ */
+function buildManagedByComment(scope: Construct): string {
+  const stack = cdk.Stack.of(scope);
+  return `managed by cdk-cf-dns (stack: ${stack.stackName}, account: ${stack.account})`;
 }
 
 /**

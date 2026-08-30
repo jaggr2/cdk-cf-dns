@@ -30,45 +30,43 @@ export interface CloudflareValidatedCertificateProps {
  * An ACM certificate whose DNS validation records are written into Cloudflare
  * automatically, removing the manual copy-paste step.
  *
- * CloudFormation does not expose the validation `ResourceRecord` as a
- * certificate attribute, so a custom resource calls `acm:DescribeCertificate`,
- * polls until the records are populated (they are absent for a few seconds
- * after creation), and writes each unique CNAME into Cloudflare.
+ * A CloudFormation `AWS::CertificateManager::Certificate` resource cannot be
+ * used here: with DNS validation and no Route 53 hosted zone, CloudFormation
+ * waits for the validation CNAMEs to exist, but the custom resource that writes
+ * them depends on the certificate — a deadlock. Instead, the custom resource
+ * creates the certificate itself (`acm:RequestCertificate`), polls until the
+ * validation `ResourceRecord`s appear, writes each unique CNAME into
+ * Cloudflare, and polls until the certificate is ISSUED before returning the
+ * certificate ARN. The construct exposes the result through
+ * `acm.Certificate.fromCertificateArn`.
  *
  * Note: if the certificate is attached to CloudFront it must live in
  * `us-east-1`; this construct does not solve cross-region certificates.
  */
 export class CloudflareValidatedCertificate extends Construct {
   /**
-   * The underlying ACM certificate.
+   * The ACM certificate created by the custom resource.
    */
-  public readonly certificate: acm.Certificate;
+  public readonly certificate: acm.ICertificate;
 
   public constructor(scope: Construct, id: string, props: CloudflareValidatedCertificateProps) {
     super(scope, id);
 
-    // Create the certificate with DNS validation but no hosted zone: the
-    // validation records are written to Cloudflare by the custom resource.
-    this.certificate = new acm.Certificate(this, 'Certificate', {
-      domainName: props.domainName,
-      subjectAlternativeNames: props.subjectAlternativeNames,
-      validation: acm.CertificateValidation.fromDns(),
-    });
-
     const provider = CloudflareCertificateProvider.getOrCreate(this);
-    provider.grantSecretRead(props.zone.apiToken);
+    provider.grantSecretRead(props.zone.apiToken, props.zone.apiTokenRegion);
 
     const validation = new cdk.CustomResource(this, 'DnsValidation', {
       serviceToken: provider.serviceToken,
       resourceType: 'Custom::CloudflareCertificateDnsValidation',
       properties: {
-        certificateArn: this.certificate.certificateArn,
+        domainName: props.domainName,
+        subjectAlternativeNames: props.subjectAlternativeNames ?? [],
         zoneId: props.zone.zoneId,
-        apiTokenSecretArn: props.zone.apiToken.secretArn,
+        apiTokenSecretId: props.zone.apiToken.secretName,
+        apiTokenRegion: props.zone.apiTokenRegion,
       },
     });
 
-    // The validation resource can only read records once the certificate exists.
-    validation.node.addDependency(this.certificate);
+    this.certificate = acm.Certificate.fromCertificateArn(this, 'Certificate', validation.getAttString('CertificateArn'));
   }
 }

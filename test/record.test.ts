@@ -102,14 +102,15 @@ describe('CloudflareRecord', () => {
     expect(json).not.toContain('SecretString');
   });
 
-  test('record resource carries the zone id, secret ARN and control flags', () => {
+  test('record resource carries the zone id, secret id/region and control flags', () => {
     const { stack, zone } = makeStack();
     new CloudflareARecord(stack, 'Rec', { zone, content: '1.2.3.4' });
 
     const template = Template.fromStack(stack);
     const props = recordProperties(template);
     expect(props.zoneId).toBe(RECORD_ID);
-    expect(JSON.stringify(props.apiTokenSecretArn)).toContain('cloudflare/dns-token');
+    expect(String(props.apiTokenSecretId)).toContain('cloudflare/dns-token');
+    expect(props.apiTokenRegion).toBeDefined();
     expect(props.adoptExisting).toBe(false);
     expect(props.retainOnDelete).toBe(false);
   });
@@ -271,6 +272,37 @@ describe('subclass record types', () => {
       .map((r) => ((r as { Properties: { record: { type: string } } }).Properties.record.type))
       .sort();
     expect(types).toEqual(['A', 'AAAA', 'CAA', 'CNAME', 'MX', 'TXT']);
+  });
+});
+
+describe('managed-by comment', () => {
+  test('adds a comment referencing the stack and account by default', () => {
+    const { stack, zone } = makeStack();
+    new CloudflareARecord(stack, 'Rec', { zone, content: '1.2.3.4' });
+
+    const template = Template.fromStack(stack);
+    const comment = JSON.stringify((recordProperties(template).record as Record<string, unknown>).comment);
+    expect(comment).toContain('managed by cdk-cf-dns');
+    expect(comment).toContain('stack:');
+    expect(comment).toContain('TestStack');
+    expect(comment).toContain('account:');
+    expect(comment).toContain('AWS::AccountId');
+  });
+
+  test('a user-provided comment takes precedence', () => {
+    const { stack, zone } = makeStack();
+    new CloudflareARecord(stack, 'Rec', { zone, content: '1.2.3.4', comment: 'my comment' });
+
+    const template = Template.fromStack(stack);
+    expect((recordProperties(template).record as Record<string, unknown>).comment).toBe('my comment');
+  });
+
+  test('managedByCdkComment: false disables the automatic comment', () => {
+    const { stack, zone } = makeStack();
+    new CloudflareARecord(stack, 'Rec', { zone, content: '1.2.3.4', managedByCdkComment: false });
+
+    const template = Template.fromStack(stack);
+    expect((recordProperties(template).record as Record<string, unknown>).comment).toBeUndefined();
   });
 });
 
