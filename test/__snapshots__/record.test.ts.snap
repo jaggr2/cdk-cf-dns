@@ -1,0 +1,330 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`snapshot matches the snapshot 1`] = `
+{
+  "Parameters": {
+    "BootstrapVersion": {
+      "Default": "/cdk-bootstrap/hnb659fds/version",
+      "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+    },
+  },
+  "Resources": {
+    "AcmeCloudflareDnsProviderHandlerC2EB147C": {
+      "DependsOn": [
+        "AcmeCloudflareDnsProviderHandlerServiceRoleDefaultPolicy29270B9A",
+        "AcmeCloudflareDnsProviderHandlerServiceRole42361045",
+      ],
+      "Properties": {
+        "Architectures": [
+          "arm64",
+        ],
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
+          },
+          "S3Key": "8d28a71b0ed8ef32cf2821ace32d9a8ee76bb46d95d0a4ffb3c61b3e352c2a80.zip",
+        },
+        "Handler": "index.handler",
+        "MemorySize": 256,
+        "Role": {
+          "Fn::GetAtt": [
+            "AcmeCloudflareDnsProviderHandlerServiceRole42361045",
+            "Arn",
+          ],
+        },
+        "Runtime": "nodejs22.x",
+        "Timeout": 120,
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "AcmeCloudflareDnsProviderHandlerLogGroup64976EF1": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "AcmeCloudflareDnsProviderHandlerC2EB147C",
+        "AcmeCloudflareDnsProviderHandlerServiceRoleDefaultPolicy29270B9A",
+        "AcmeCloudflareDnsProviderHandlerServiceRole42361045",
+      ],
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              "/aws/lambda/",
+              {
+                "Ref": "AcmeCloudflareDnsProviderHandlerC2EB147C",
+              },
+            ],
+          ],
+        },
+        "RetentionInDays": 30,
+      },
+      "Type": "AWS::Logs::LogGroup",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "AcmeCloudflareDnsProviderHandlerServiceRole42361045": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "AcmeCloudflareDnsProviderHandlerServiceRoleDefaultPolicy29270B9A": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "secretsmanager:GetSecretValue",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":secretsmanager:",
+                    {
+                      "Ref": "AWS::Region",
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId",
+                    },
+                    ":secret:cloudflare/dns-token",
+                  ],
+                ],
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "PolicyName": "AcmeCloudflareDnsProviderHandlerServiceRoleDefaultPolicy29270B9A",
+        "Roles": [
+          {
+            "Ref": "AcmeCloudflareDnsProviderHandlerServiceRole42361045",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Policy",
+    },
+    "AcmeCloudflareDnsProviderframeworkonEventE4A0B127": {
+      "DependsOn": [
+        "AcmeCloudflareDnsProviderframeworkonEventServiceRoleDefaultPolicyF3F4D0DA",
+        "AcmeCloudflareDnsProviderframeworkonEventServiceRole62C7F914",
+      ],
+      "Properties": {
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
+          },
+          "S3Key": "e16ffb3b34af185b8b30c88fdb19faa13b6c42bb38580485c4e84b384ee48b63.zip",
+        },
+        "Description": "AWS CDK resource provider framework - onEvent (TestStack/AcmeCloudflareDnsProvider/Provider)",
+        "Environment": {
+          "Variables": {
+            "USER_ON_EVENT_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AcmeCloudflareDnsProviderHandlerC2EB147C",
+                "Arn",
+              ],
+            },
+          },
+        },
+        "Handler": "framework.onEvent",
+        "LoggingConfig": {
+          "ApplicationLogLevel": "FATAL",
+          "LogFormat": "JSON",
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "AcmeCloudflareDnsProviderframeworkonEventServiceRole62C7F914",
+            "Arn",
+          ],
+        },
+        "Runtime": "nodejs24.x",
+        "Timeout": 900,
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "AcmeCloudflareDnsProviderframeworkonEventServiceRole62C7F914": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "AcmeCloudflareDnsProviderframeworkonEventServiceRoleDefaultPolicyF3F4D0DA": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "lambda:InvokeFunction",
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "AcmeCloudflareDnsProviderHandlerC2EB147C",
+                    "Arn",
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "AcmeCloudflareDnsProviderHandlerC2EB147C",
+                          "Arn",
+                        ],
+                      },
+                      ":*",
+                    ],
+                  ],
+                },
+              ],
+            },
+            {
+              "Action": "lambda:GetFunction",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "AcmeCloudflareDnsProviderHandlerC2EB147C",
+                  "Arn",
+                ],
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "PolicyName": "AcmeCloudflareDnsProviderframeworkonEventServiceRoleDefaultPolicyF3F4D0DA",
+        "Roles": [
+          {
+            "Ref": "AcmeCloudflareDnsProviderframeworkonEventServiceRole62C7F914",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Policy",
+    },
+    "Rec854F2A50": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "AcmeCloudflareDnsProviderframeworkonEventE4A0B127",
+            "Arn",
+          ],
+        },
+        "adoptExisting": false,
+        "apiTokenSecretArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition",
+              },
+              ":secretsmanager:",
+              {
+                "Ref": "AWS::Region",
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId",
+              },
+              ":secret:cloudflare/dns-token",
+            ],
+          ],
+        },
+        "record": {
+          "content": "1.2.3.4",
+          "name": "app.example.com",
+          "proxied": true,
+          "ttl": 1,
+          "type": "A",
+        },
+        "retainOnDelete": false,
+        "zoneId": "c0ffee00000000000000000000000000",
+      },
+      "Type": "Custom::CloudflareDnsRecord",
+      "UpdateReplacePolicy": "Delete",
+    },
+  },
+  "Rules": {
+    "CheckBootstrapVersion": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Not": [
+              {
+                "Fn::Contains": [
+                  [
+                    "1",
+                    "2",
+                    "3",
+                    "4",
+                    "5",
+                  ],
+                  {
+                    "Ref": "BootstrapVersion",
+                  },
+                ],
+              },
+            ],
+          },
+          "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI.",
+        },
+      ],
+    },
+  },
+}
+`;

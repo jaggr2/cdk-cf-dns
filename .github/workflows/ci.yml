@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Generate API.md
+        run: npm run docs
+      - name: Ensure API.md is committed and up to date
+        run: git diff --exit-code API.md
+      - name: Test
+        run: npm test
+      - name: Lint
+        run: npm run lint
+      - name: Example app synthesises
+        working-directory: examples/minimal-app
+        run: |
+          npm ci
+          npm run synth
