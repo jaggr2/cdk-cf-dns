@@ -308,18 +308,29 @@ export function resolveRecordName(recordName: string | undefined, zoneName: stri
 }
 
 /**
- * Chunks a TXT record value longer than 255 characters into a series of quoted
- * segments, which is how multiple strings are encoded in a single TXT record.
+ * Encodes a TXT record value for Cloudflare. TXT content must consist of RFC
+ * 1035 "character strings" delimited by double quotes; Cloudflare's dashboard
+ * warns when content is not quoted and treats unquoted content as a single
+ * string. Values longer than 255 characters are split into a series of quoted
+ * segments.
  */
 function chunkTxt(type: CloudflareRecordType, content: string): string {
-  if (type !== CloudflareRecordType.TXT || content.length <= 255) {
+  if (type !== CloudflareRecordType.TXT) {
     return content;
   }
   const chunks: string[] = [];
   for (let i = 0; i < content.length; i += 255) {
     chunks.push(content.slice(i, i + 255));
   }
-  return chunks.map((chunk) => `"${chunk}"`).join(' ');
+  return chunks.map((chunk) => `"${escapeTxt(chunk)}"`).join(' ');
+}
+
+/**
+ * Escapes double quotes and backslashes so the value can be wrapped as a single
+ * RFC 1035 quoted string (internal `"` and `\` are escaped with a backslash).
+ */
+function escapeTxt(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 /**

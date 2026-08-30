@@ -271,14 +271,29 @@ export function isRecordDoesNotExist(response: { status: number; body: Cloudflar
 /**
  * Builds the DNS record payload sent to the Cloudflare API from the custom
  * resource properties.
+ *
+ * CloudFormation can deliver nested custom resource properties with stringified
+ * values (e.g. `ttl: "300"`), so numeric and boolean fields are coerced back to
+ * their real types before the payload is sent.
  */
 export function buildRecordPayload(properties: Record<string, unknown>): Record<string, unknown> {
   const record = (properties.record ?? {}) as Record<string, unknown>;
   const payload: Record<string, unknown> = {};
 
   for (const key of ['name', 'type', 'content', 'data', 'ttl', 'proxied', 'priority', 'comment', 'tags']) {
-    if (record[key] !== undefined) {
-      payload[key] = record[key];
+    if (record[key] === undefined) {
+      continue;
+    }
+    switch (key) {
+      case 'ttl':
+      case 'priority':
+        payload[key] = Number(record[key]);
+        break;
+      case 'proxied':
+        payload[key] = record[key] === true || record[key] === 'true';
+        break;
+      default:
+        payload[key] = record[key];
     }
   }
 

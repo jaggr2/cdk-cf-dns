@@ -86,6 +86,34 @@ describe('handler', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  test('coerces stringified ttl/priority/proxied values from CloudFormation', async () => {
+    const fetchMock = mockFetch({ status: 200, body: okResult('a'.repeat(32), 'app.example.com') });
+
+    const event = baseEvent({
+      ResourceProperties: {
+        ...(baseEvent().ResourceProperties as Record<string, unknown>),
+        record: {
+          name: 'app.example.com',
+          type: 'A',
+          content: '1.2.3.4',
+          ttl: '300',
+          proxied: 'true',
+        },
+      },
+    });
+
+    await handler(event as never);
+
+    const sent = fetchMock.mock.calls[0][1].body as string;
+    expect(JSON.parse(sent)).toEqual({
+      name: 'app.example.com',
+      type: 'A',
+      content: '1.2.3.4',
+      ttl: 300,
+      proxied: true,
+    });
+  });
+
   test('create conflict with adoptExisting=false throws a helpful error', async () => {
     mockFetch(errorResponse(400, 81057, 'DNS record already exists'));
 

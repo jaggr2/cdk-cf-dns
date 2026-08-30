@@ -130,6 +130,10 @@ export class CloudflareDnsProvider extends Construct {
    * Grants the provider's handler `secretsmanager:GetSecretValue` on the given
    * secret. Repeated grants of the same secret are deduplicated.
    *
+   * Delegates to `ISecret.grantRead`, which correctly handles partial ARNs for
+   * secrets imported by name (Secrets Manager appends a random suffix, so the
+   * grant targets `arn:...:secret:<name>-??????`).
+   *
    * @param secret The secret holding a Cloudflare API token.
    */
   public grantSecretRead(secret: secretsmanager.ISecret): void {
@@ -138,10 +142,7 @@ export class CloudflareDnsProvider extends Construct {
       return;
     }
     this.grantedSecrets.add(arn);
-    this.handlerRole.addToPrincipalPolicy(new iam.PolicyStatement({
-      actions: ['secretsmanager:GetSecretValue'],
-      resources: [arn],
-    }));
+    secret.grantRead(this.handlerRole);
   }
 }
 
@@ -207,6 +208,10 @@ export class CloudflareCertificateProvider extends Construct {
    * Grants the provider's handler `secretsmanager:GetSecretValue` on the given
    * secret. Repeated grants of the same secret are deduplicated.
    *
+   * Delegates to `ISecret.grantRead`, which correctly handles partial ARNs for
+   * secrets imported by name (Secrets Manager appends a random suffix, so the
+   * grant targets `arn:...:secret:<name>-??????`).
+   *
    * @param secret The secret holding a Cloudflare API token.
    */
   public grantSecretRead(secret: secretsmanager.ISecret): void {
@@ -215,9 +220,6 @@ export class CloudflareCertificateProvider extends Construct {
       return;
     }
     this.grantedSecrets.add(arn);
-    this.handlerRole.addToPrincipalPolicy(new iam.PolicyStatement({
-      actions: ['secretsmanager:GetSecretValue'],
-      resources: [arn],
-    }));
+    secret.grantRead(this.handlerRole);
   }
 }

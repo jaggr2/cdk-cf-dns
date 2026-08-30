@@ -93,7 +93,10 @@ exports[`snapshot matches the snapshot 1`] = `
         "PolicyDocument": {
           "Statement": [
             {
-              "Action": "secretsmanager:GetSecretValue",
+              "Action": [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret",
+              ],
               "Effect": "Allow",
               "Resource": {
                 "Fn::Join": [
@@ -111,7 +114,7 @@ exports[`snapshot matches the snapshot 1`] = `
                     {
                       "Ref": "AWS::AccountId",
                     },
-                    ":secret:cloudflare/dns-token",
+                    ":secret:cloudflare/dns-token-??????",
                   ],
                 ],
               },

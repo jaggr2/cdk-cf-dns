@@ -215,14 +215,14 @@ describe('validation at synth time', () => {
   });
 });
 
-describe('TXT chunking', () => {
-  test('short TXT values are passed through unchanged', () => {
+describe('TXT encoding', () => {
+  test('short TXT values are wrapped in double quotes', () => {
     const { stack, zone } = makeStack();
     new CloudflareTxtRecord(stack, 'Rec', { zone, content: 'short' });
 
     const template = Template.fromStack(stack);
     const props = recordProperties(template);
-    expect((props.record as Record<string, unknown>).content).toBe('short');
+    expect((props.record as Record<string, unknown>).content).toBe('"short"');
   });
 
   test('TXT values longer than 255 characters are chunked into quoted segments', () => {
@@ -234,6 +234,24 @@ describe('TXT chunking', () => {
     const props = recordProperties(template);
     const chunked = (props.record as Record<string, unknown>).content as string;
     expect(chunked).toBe(`"${'x'.repeat(255)}" "${'x'.repeat(45)}"`);
+  });
+
+  test('internal double quotes are escaped inside the quoted string', () => {
+    const { stack, zone } = makeStack();
+    new CloudflareTxtRecord(stack, 'Rec', { zone, content: 'say "hi"' });
+
+    const template = Template.fromStack(stack);
+    const props = recordProperties(template);
+    expect((props.record as Record<string, unknown>).content).toBe('"say \\"hi\\""');
+  });
+
+  test('backslashes are preserved', () => {
+    const { stack, zone } = makeStack();
+    new CloudflareTxtRecord(stack, 'Rec', { zone, content: 'C:\\path\\to' });
+
+    const template = Template.fromStack(stack);
+    const props = recordProperties(template);
+    expect((props.record as Record<string, unknown>).content).toBe('"C:\\\\path\\\\to"');
   });
 });
 
