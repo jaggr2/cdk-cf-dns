@@ -4,13 +4,11 @@ name: Release
 # The published version is taken from the tag, so keep tags in sync with
 # package.json (npm version v0.1.0 && git push --tags).
 #
-# Auth: npm trusted publishing (OIDC). npm automatically prefers the GitHub
-# Actions OIDC token when a trusted publisher is configured for this package
+# Auth: npm trusted publishing (OIDC). npm automatically uses the GitHub
+# Actions OIDC token because a trusted publisher is configured for this package
 # on npmjs.com (Settings -> Trusted publishing -> GitHub Actions ->
 # owner `jaggr2`, repo `cdk-cf-dns`, workflow `release.yml`, action `npm publish`).
-# Provenance is generated automatically under trusted publishing.
-# Until the trusted publisher is configured, the optional NPM_TOKEN secret is
-# used as a fallback (create a granular token with "bypass 2FA" on npmjs.com).
+# No npm token is used or required; provenance is generated automatically.
 
 on:
   push:
@@ -43,5 +41,3 @@ jobs:
         run: npm run lint
       - name: Publish to npm
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
